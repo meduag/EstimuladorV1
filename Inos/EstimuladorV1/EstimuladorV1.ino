@@ -1,43 +1,38 @@
 #include <SPI.h>                // Library for SPI communication
-#include "I2Cdev.h"
-#include "MPU6050.h"
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
 #include "Wire.h"
-#endif
 
 // Output pins
-#define RELAY_CH_1 6            // Relay for CH1
-#define RELAY_CH_2 7            // Relay for CH2
-#define BuzzerPin 9             // Buzzer pin activation for status messages
-#define DAC_SS_PIN 10			// Pin for enable DAC communication
+const int RELAY_CH_1 = 6;            // Relay for CH1
+const int RELAY_CH_2 = 7;            // Relay for CH2
+const int BuzzerPin = 9;             // Buzzer pin activation for status messages
+const int DAC_SS_PIN = 10;			// Pin for enable DAC communication
 
 // Input pins
-#define Pin_Inter 23            // Emergency Button
+const int Pin_Inter = 23;            // Emergency Button
 
 // Values for DAC calibration
-#define CH1_MAX_POS 1883		// Ch1 max positive value
-#define CH1_MIN_NEG 1842		// Ch1 max negative value
-#define CH2_MAX_POS 2047		// Ch2 max positive value
-#define CH2_MIN_NEG 2047		// Ch2 max negative value
-#define STIM_ZERO 2047      // Zero valoue for reference on DAC 
-#define min_stim 5          // Estimulacion minima para ZeroChannels
+const int CH1_MAX_POS = 1883;		// Ch1 max positive value
+const int CH1_MIN_NEG = 1842;		// Ch1 max negative value
+const int CH2_MAX_POS = 2047;		// Ch2 max positive value
+const int CH2_MIN_NEG = 2047;		// Ch2 max negative value
+const int STIM_ZERO = 2047;      // Zero valoue for reference on DAC 
+const int min_stim = 5;          // Estimulacion minima para ZeroChannels
 
 // Byte of
-#define fin '>'             // Character separator used for split data '>'
-#define num_struc 2
+const char fin = '>';             // Character separator used for split data '>'
+const int num_struc = 2;
+const int MPU = 0x68;
 
-#define t_min 60000000
-#define t_seg 1000000
-#define t_mil 100000
+const long t_min = 60000000;
+const long t_seg = 1000000;
+const long t_mil = 100000;
 
-// criação do Objeto do Aclererometro
-MPU6050 acel;
-
+/******************************************************************************************/
 // variaveis de control y captura de dados do alcelerometro
 // 0 - eixo X
 // 1 - eixo Y
 // 2 - eixo Z
-int16_t acxyz[] = {0, 0, 0}; 
+int16_t xyz[] = {0, 0, 0}; 
 
 
 //unsigned int pwrc = 2e6;    // Time of rest used in tests rh and cr AINDA SIM USAR
@@ -74,7 +69,8 @@ unsigned long ul_var[] = {0, 0, 0, 0, 0, t_min, t_seg, t_mil};
 // 2 - time for final pw and pwr
 // 3 - time for minute lapse in control stimulation
 // 4 - buzer time on stimulation function
-unsigned long ul_vt[] = {0, 0, 0, 0, 0};
+// 5 - time of accel measuring
+unsigned long ul_vt[] = {0, 0, 0, 0, 0, 0};
 //unsigned long* ul_vt = NULL;
 
 /*************** Struct for channels data **************/
@@ -94,13 +90,6 @@ struct sp * data_sp; // stimulation values for CH1
 /************************* Setup ******************************/
 /**************************************************************/
 void setup() {
-    // join I2C bus (I2Cdev library doesn't do this automatically)
-  #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-    Wire.begin();
-  #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-    Fastwire::setup(400, true);
-  #endif
-
   // Initialize parameters for Stim-PC communication
   Serial.begin(2000000);
   Serial.setTimeout(1);
@@ -108,7 +97,8 @@ void setup() {
 
   // Initializa SPI comunication
   SPI.begin();
-  acel.initialize();
+
+  accel_ini();
 
   // Initialize Output pins
   for (int i = 0; i < 4; i++) {
@@ -278,7 +268,7 @@ void stimulation() {
   //Serial.println(data_sp[0].sps[1]);
 
   ul_vt[3] = micros() + ul_var[5];          // * min_t
-  ul_vt[0] = micros() + ul_var[0];          // ts - valor final de tiempo
+  ul_vt[0] = micros() + ul_var[0];          // ts >> valor final de tiempo
 
   // valor inicial rampa o tsus
   // Serial.println("Ton >>>>>>>");
@@ -393,6 +383,50 @@ void stimulation() {
 
     }
 
+    /****************************************************************/
+    //////////////////////// Make a signal ///////////////////////////
+    /****************************************************************/
+    if (micros() >= ul_vt[2] && v_aux[0] < 4) {
+      switch (v_aux[1]) {
+        case 1:  // mA
+          v_aux[1] = 2;
+          sendStimValue(0, 1, STIM_ZERO - v_aux[2]);
+          ul_vt[2] = micros() + ul_var[1];
+          break;
+        case 2:
+          v_aux[1] = 3;
+          //ul_vt[3] = micros(); // para ver el tiempo de pwr menos y hacer alguna cosa
+          switch (v_aux[0]) {
+            case 1:
+              if (v_aux[2] < ul_var[4]) {
+                v_aux[2] = v_aux[2] + data_sp[0].sps[1];
+              }
+              break;
+            case 2:
+              v_aux[2] = ul_var[4];
+              break;
+            case 3:
+              if (v_aux[2] > 0) {
+                v_aux[2] = v_aux[2] - data_sp[0].sps[1];
+              }
+              break;
+          }
+          sendStimValue(0, 1, STIM_ZERO - 10);
+          //ul_vt[3] = micros() - ul_vt[3];
+          //ul_vt[2] = micros() + (ul_var[2] - ul_vt[3]);
+          ul_vt[2] = micros() + ul_var[2];
+          break;
+        case 3:
+          v_aux[1] = 1;
+          sendStimValue(0, 1, STIM_ZERO + v_aux[2]);
+          ul_vt[2] = micros() + ul_var[1];
+          break;
+      }
+
+    }
+
+
+
     // Verify the time for every minute
     if(micros() >= ul_vt[3]){
       //Serial.println("m");
@@ -485,6 +519,16 @@ void InitializVal_struct(int ch) {
   for (int i = 0; i < 4; i++) {
     data_sp[ch].sps[i] = 0;
   }
+}
+
+void accel_ini(){
+  Wire.begin();
+  Wire.beginTransmission(MPU);
+  Wire.write(0x6B); 
+   
+  //Inicializa o MPU-6050
+  Wire.write(0); 
+  Wire.endTransmission(true);
 }
 
 
