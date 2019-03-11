@@ -255,6 +255,7 @@ void stimulation() {
   /// Example data in
   // 2>500>19500>1>1883>1>76>1>2>5>5>0>4079>2>5>10>20>0>0>0>
 
+  fx_pausa();
 
 
   // Variables auxiliares y sus valores iniciales
@@ -262,7 +263,8 @@ void stimulation() {
   // 1 - spw = 1;                            // secuencia de la señal especifica canal 1
   // 2 - mA = 0;                             // valor de miliamp sendo pasos ou valor final
   // 3 - cont_min = 0;                       // contador de minutos
-  int v_aux[] = {1, 1, 0, 0};
+  // 4 - seq medicion acel                   // contador sequencia de medicion
+  int v_aux[] = {1, 1, 0, 0, 1};
 
   //Serial.print("Paso mA: ");
   //Serial.println(data_sp[0].sps[1]);
@@ -425,6 +427,42 @@ void stimulation() {
 
     }
 
+    /****************************************************************/
+    ////////////////////////   Read accel   ///////////////////////////
+    /****************************************************************/
+    if (v_aux[0] > 4) { /// normal es < que 4
+      switch (v_aux[4]) { // para acel
+        case 1:  // mA
+          Wire.beginTransmission(MPU);
+          Wire.write(0x3B); // starting with register 0x3B (ACCEL_XOUT_H)
+          Wire.endTransmission(false);
+          v_aux[4] = 2;
+          break;
+        case 2:
+          if(v_aux[1] = 2){
+            Wire.requestFrom(MPU, 6, true);
+            v_aux[4] = 3;
+          }
+          break;
+        case 3:
+          xyz[0]= Wire.read() << 8 | Wire.read();
+          v_aux[4] = 4;
+          break;
+        case 4:
+          xyz[1]= Wire.read() << 8 | Wire.read();
+          v_aux[4] = 5;
+          break;
+        case 5:
+          xyz[2]= Wire.read() << 8 | Wire.read();
+          v_aux[4] = 6;
+          break;
+        case 6:
+          //print_accel();
+          v_aux[4] = 1;
+          break;
+      }
+    }
+
 
 
     // Verify the time for every minute
@@ -433,6 +471,7 @@ void stimulation() {
       v_aux[3] += 1; // contador  para imprimir minutos
       ul_vt[3] = micros() + ul_var[5];          // * min_t
       digitalWrite(Output_Pins[2], 1); // Enable pin buzzer
+      Serial.println("M");
       ul_vt[4] = 2e5 + micros();
     }
 
@@ -633,4 +672,27 @@ void print_dataIn() {
   Serial.println("");
   Serial.println("");
   Serial.println("");
+}
+
+void print_accel(){
+  //Serial.print("AcX = ");
+  Serial.print(xyz[0]);
+  //Serial.print(" | AcY = ");
+  Serial.print(";");
+  Serial.print(xyz[1]);
+  //Serial.print(" | AcZ = ");
+  Serial.print(";");
+  Serial.println(xyz[2]);
+}
+
+void fx_pausa(){
+  Serial.print("Press a key in order to start the Stimulation");
+  bool ini = 1;
+  while(ini){
+    if(Serial.available() != 0){
+        Serial.readString();
+        print_dataIn();
+        ini = 0;
+    }
+  }
 }

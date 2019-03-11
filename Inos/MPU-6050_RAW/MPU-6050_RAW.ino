@@ -5,8 +5,7 @@ const int MPU = 0x68;
 unsigned long ini = 0, fin = 0;
 // Variaveis para armazenar valores dos sensores
 long AcX, AcY, AcZ;
-void setup()
-{
+void setup(){
   Serial.begin(115200);
   Wire.begin();
   Wire.setClock(400000);
@@ -18,8 +17,7 @@ void setup()
   Wire.endTransmission(true);
 }
 
-void loop()
-{
+void loop(){
   if (Serial.available() != 0)
   {
     Serial.readString();
@@ -35,8 +33,7 @@ void loop()
   }
 }
 
-void read_mpu()
-{
+void read_mpu(){
   // int c = 0;
   /*Serial.println("tempo pedido accel");
   delay(100);
